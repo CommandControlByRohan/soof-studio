@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Soof Studio — Learn Kutch Soof Embroidery</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+</head>
+<body>
+
+<!-- ═══════════════ TOPBAR ═══════════════ -->
+<header id="topbar">
+  <div id="brand">
+    <span class="brand-icon">◇</span>
+    <span class="brand-name">Soof Studio</span>
+    <span class="brand-sub">Kutch Soof Embroidery</span>
+  </div>
+  <nav id="mode-nav">
+    <button class="mode-btn active" data-mode="LEARN" onclick="setMode('LEARN')">
+      <span class="mode-icon">📖</span> Learn
+    </button>
+    <button class="mode-btn" data-mode="PRACTICE" onclick="setMode('PRACTICE')">
+      <span class="mode-icon">✏️</span> Practice
+    </button>
+    <button class="mode-btn" data-mode="FREE" onclick="setMode('FREE')">
+      <span class="mode-icon">🎨</span> Free Stitch
+    </button>
+  </nav>
+  <div id="thread-counter">
+    <span class="counter-label">Cursor</span>
+    <span id="warp-count" class="counter-val">W: —</span>
+    <span id="weft-count" class="counter-val">F: —</span>
+  </div>
+</header>
+
+<!-- ═══════════════ APP BODY ═══════════════ -->
+<div id="app-body">
+
+  <!-- LEFT PANEL -->
+  <aside id="left-panel">
+    <div id="panel-content"></div>
+  </aside>
+
+  <!-- CANVAS -->
+  <main id="canvas-wrapper">
+    <div id="canvas-container"></div>
+  </main>
+
+  <!-- RIGHT PANEL: Step-by-step instructions -->
+  <aside id="right-panel">
+    <div id="instruction-panel">
+      <div class="panel-heading">STITCH GUIDE</div>
+      <div id="instruction-body">
+        <p class="panel-hint">Select a motif from the library to begin learning.</p>
+      </div>
+    </div>
+  </aside>
+
+</div>
+
+<!-- ═══════════════ SCRIPTS ═══════════════ -->
+<script src="motifs.js"></script>
+<script src="sketch.js"></script>
+
+<script>
+// ═══════════════ APP STATE ═══════════════
+const SoofState = {
+  mode: 'LEARN',
+  activeMotif: null,
+  currentStep: 0,
+  placedStitches: [],
+  selectedColor: '#C0392B',
+  ghostVisible: true,
+  cursorWarp: 0,
+  cursorWeft: 0,
+  lastClickedPoint: null,
+  isStitching: false,  // two-click mode: first click = start, second click = end
+  stitchStart: null,
+};
+
+function setMode(m) {
+  SoofState.mode = m;
+  SoofState.currentStep = 0;
+  SoofState.placedStitches = [];
+  SoofState.lastClickedPoint = null;
+  SoofState.isStitching = false;
+  SoofState.stitchStart = null;
+
+  document.querySelectorAll('.mode-btn').forEach(btn =>
+    btn.classList.toggle('active', btn.dataset.mode === m));
+  renderLeftPanel();
+  renderInstructionPanel();
+}
+
+// ═══════════════ LEFT PANEL ═══════════════
+
+function renderLeftPanel() {
+  const el = document.getElementById('panel-content');
+
+  if (SoofState.mode === 'LEARN' || SoofState.mode === 'PRACTICE') {
+    el.innerHTML = `
+      <div class="panel-heading">MOTIF LIBRARY</div>
+      <p class="panel-hint">Select a motif to ${SoofState.mode === 'LEARN' ? 'learn step-by-step' : 'practice tracing'}.</p>
+      ${SOOF_MOTIFS.map((m, i) => `
+        <button class="motif-chip ${SoofState.activeMotif === m ? 'active' : ''}" onclick="selectMotif(${i})">
+          <div class="motif-chip-name">${m.icon} ${m.name}</div>
+          <div class="motif-chip-desc">${m.description}</div>
+        </button>
+      `).join('')}
+    `;
+  } else {
+    // FREE mode — color palette + tools
+    el.innerHTML = `
+      <div class="panel-heading">THREAD PALETTE</div>
+      <p class="panel-hint">Pick a thread color, then click two points on the grid to lay a stitch.</p>
+      <div class="color-grid">
+        ${[
+          { name: 'Crimson', hex: '#C0392B' },
+          { name: 'Emerald', hex: '#1A7A4A' },
+          { name: 'Royal Blue', hex: '#1B4F9E' },
+          { name: 'Saffron', hex: '#D4A017' },
+          { name: 'Charcoal', hex: '#2C2C2C' },
+          { name: 'White', hex: '#F5EDD6' },
+        ].map(c => `
+          <button class="color-swatch ${SoofState.selectedColor === c.hex ? 'active' : ''}"
+            style="background:${c.hex}" title="${c.name}"
+            onclick="SoofState.selectedColor='${c.hex}'; renderLeftPanel()">
+          </button>
+        `).join('')}
+      </div>
+      <div class="panel-divider"></div>
+      <div class="panel-heading">TOOLS</div>
+      <button class="tool-btn" onclick="SoofState.placedStitches.pop()">↩ Undo Last Stitch</button>
+      <button class="tool-btn" onclick="SoofState.placedStitches=[]">✕ Clear All</button>
+      <div class="panel-divider"></div>
+      <div class="panel-heading">STITCHES PLACED</div>
+      <div class="stitch-count">${SoofState.placedStitches.length}</div>
+    `;
+  }
+}
+
+function selectMotif(idx) {
+  SoofState.activeMotif = SOOF_MOTIFS[idx];
+  SoofState.currentStep = 0;
+  SoofState.placedStitches = [];
+  SoofState.isStitching = false;
+  SoofState.stitchStart = null;
+  renderLeftPanel();
+  renderInstructionPanel();
+}
+
+// ═══════════════ INSTRUCTION PANEL ═══════════════
+
+function renderInstructionPanel() {
+  const el = document.getElementById('instruction-body');
+  const motif = SoofState.activeMotif;
+
+  if (!motif) {
+    el.innerHTML = '<p class="panel-hint">Select a motif from the library to begin.</p>';
+    return;
+  }
+
+  if (SoofState.mode === 'LEARN') {
+    const step = motif.steps[SoofState.currentStep];
+    const isComplete = SoofState.currentStep >= motif.steps.length;
+
+    if (isComplete) {
+      el.innerHTML = `
+        <div class="completion-card">
+          <div class="completion-icon">✦</div>
+          <div class="completion-title">Motif Complete!</div>
+          <p class="panel-hint">You have successfully laid all ${motif.steps.length} stitches for the ${motif.name} pattern.</p>
+          <button class="tool-btn" onclick="selectMotif(${SOOF_MOTIFS.indexOf(motif)})">↻ Restart</button>
+        </div>
+      `;
+      return;
+    }
+
+    el.innerHTML = `
+      <div class="motif-title">${motif.icon} ${motif.name}</div>
+      <div class="step-progress">Step ${SoofState.currentStep + 1} of ${motif.steps.length}</div>
+      <div class="progress-bar">
+        <div class="progress-fill" style="width:${((SoofState.currentStep) / motif.steps.length) * 100}%"></div>
+      </div>
+      <div class="step-instruction">${step.instruction}</div>
+      <div class="step-hint">
+        Click on <strong>W:${step.to[0]}, F:${step.to[1]}</strong> to lay this stitch.
+      </div>
+      <div class="panel-divider"></div>
+      <p class="panel-hint" style="font-size:10px">
+        <strong>Counting tip:</strong> Warp (W) threads run ↕ vertically. Weft (F) threads run ↔ horizontally.
+        Always count from the last stitch point.
+      </p>
+    `;
+  } else if (SoofState.mode === 'PRACTICE') {
+    const total = motif.stitches.length;
+    const placed = SoofState.placedStitches.length;
+    const pct = total > 0 ? ((placed / total) * 100).toFixed(0) : 0;
+    el.innerHTML = `
+      <div class="motif-title">${motif.icon} ${motif.name}</div>
+      <div class="step-progress">${placed} of ${total} stitches placed</div>
+      <div class="progress-bar">
+        <div class="progress-fill" style="width:${pct}%"></div>
+      </div>
+      <p class="panel-hint">Click two grid points to lay a stitch. Match the ghost outline.</p>
+      ${placed >= total ? `
+        <div class="completion-card">
+          <div class="completion-icon">✦</div>
+          <div class="completion-title">Pattern Traced!</div>
+        </div>
+      ` : ''}
+    `;
+  }
+}
+
+// ═══════════════ BOOTSTRAP ═══════════════
+renderLeftPanel();
+renderInstructionPanel();
+</script>
+
+</body>
+</html>
