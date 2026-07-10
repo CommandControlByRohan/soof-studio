@@ -3,11 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Soof Studio — Learn Kutch Soof Embroidery</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+  <title>Soof Studio — SVG Engine</title>
+  <link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
 
@@ -16,210 +13,149 @@
   <div id="brand">
     <span class="brand-icon">◇</span>
     <span class="brand-name">Soof Studio</span>
-    <span class="brand-sub">Kutch Soof Embroidery</span>
+  </div>
+  <div id="font-controls" style="display: flex; gap: 4px; margin-left: 20px;">
+    <button id="btn-font-dec" class="font-btn" style="padding: 4px 8px; font-weight: bold;">A-</button>
+    <button id="btn-font-inc" class="font-btn" style="padding: 4px 8px; font-weight: bold;">A+</button>
   </div>
   <nav id="mode-nav">
-    <button class="mode-btn active" data-mode="LEARN" onclick="setMode('LEARN')">
-      <span class="mode-icon">📖</span> Learn
+    <button class="mode-btn active" data-mode="LEARN" id="btn-learn">
+      <span class="mode-icon">L</span> Learn
     </button>
-    <button class="mode-btn" data-mode="PRACTICE" onclick="setMode('PRACTICE')">
-      <span class="mode-icon">✏️</span> Practice
+    <button class="mode-btn" data-mode="PRACTICE" id="btn-practice">
+      <span class="mode-icon">P</span> Practice
     </button>
-    <button class="mode-btn" data-mode="FREE" onclick="setMode('FREE')">
-      <span class="mode-icon">🎨</span> Free Stitch
+    <button class="mode-btn" data-mode="FREE" id="btn-free">
+      <span class="mode-icon">S</span> Sandbox
     </button>
   </nav>
+
+  <!-- Feature 1: Flip button -->
+  <button class="font-btn" id="btn-flip" title="Toggle between working reverse side and finished front face">
+    ↪ Finished
+  </button>
+
   <div id="thread-counter">
     <span class="counter-label">Cursor</span>
-    <span id="warp-count" class="counter-val">W: —</span>
-    <span id="weft-count" class="counter-val">F: —</span>
+    <span id="coord-display" class="counter-val">Warp 0 Weft 0</span>
   </div>
 </header>
 
 <!-- ═══════════════ APP BODY ═══════════════ -->
 <div id="app-body">
-
   <!-- LEFT PANEL -->
   <aside id="left-panel">
-    <div id="panel-content"></div>
+    <div id="left-panel-content"></div>
   </aside>
 
-  <!-- CANVAS -->
-  <main id="canvas-wrapper">
-    <div id="canvas-container"></div>
-  </main>
+  <!-- WORKSPACE -->
+  <main id="workspace">
+    <!-- SVG Container for Grid & Stitches -->
+    <div id="svg-container">
+      <!-- Pixel-level embroidery canvas (behind SVG) -->
+      <canvas id="stitch-canvas"></canvas>
 
-  <!-- RIGHT PANEL: Step-by-step instructions -->
-  <aside id="right-panel">
-    <div id="instruction-panel">
-      <div class="panel-heading">STITCH GUIDE</div>
-      <div id="instruction-body">
-        <p class="panel-hint">Select a motif from the library to begin learning.</p>
+      <svg id="canvas-svg" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <!-- 3D Cylindrical Thread Filter (specular lighting + displacement for organic texture) -->
+          <filter id="thread-texture" x="-20%" y="-20%" width="140%" height="140%">
+            <!-- Create noise to displacement map the edges for fiber realism -->
+            <feTurbulence type="fractalNoise" baseFrequency="0.5 0.1" numOctaves="2" result="noise"/>
+            <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.2" xChannelSelector="R" yChannelSelector="G" result="displaced"/>
+            
+            <!-- Generate 3D specular highlight along the thread cylinder -->
+            <feSpecularLighting in="displaced" specularExponent="16" lighting-color="#ffffff" surfaceScale="1.5" result="light">
+              <feDistantLight azimuth="225" elevation="50" />
+            </feSpecularLighting>
+            
+            <!-- Combine the lighting highlight with the original color -->
+            <feComposite in="displaced" in2="light" operator="arithmetic" k1="0.5" k2="0.85" k3="0.6" k4="0" result="litStitch"/>
+            
+            <!-- Subtle drop shadow under the 3D thread -->
+            <feDropShadow dx="0.6" dy="1.2" stdDeviation="0.8" flood-color="#000000" flood-opacity="0.38"/>
+          </filter>
+
+          <!-- Original shadow for overlays -->
+          <filter id="thread-shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0.5" dy="1" stdDeviation="0.8" flood-opacity="0.3"/>
+          </filter>
+
+          <!-- Feature 3: Fabric texture for woven linen look -->
+          <filter id="fabric-texture" x="0%" y="0%" width="100%" height="100%">
+            <!-- 1. Generate procedural fiber noise -->
+            <feTurbulence type="fractalNoise" baseFrequency="0.08 0.08" numOctaves="4" result="noise" />
+            
+            <!-- 2. Woven fabric structure kernel -->
+            <feConvolveMatrix order="3" kernelMatrix="0 -1 0 -1 5 -1 0 -1 0" in="noise" result="woven" />
+            
+            <!-- 3. Add 3D diffuse lighting to simulate thread bumps -->
+            <feDiffuseLighting in="woven" surfaceScale="1.2" lighting-color="#ffffff" result="light">
+              <feDistantLight azimuth="225" elevation="65" />
+            </feDiffuseLighting>
+            
+            <!-- 4. Blend onto the background fabric color -->
+            <feBlend mode="multiply" in="SourceGraphic" in2="light" />
+          </filter>
+        </defs>
+
+        <!-- Groups for z-ordering -->
+        <g id="layer-fabric"></g>   <!-- Feature 3: woven linen threads -->
+        <g id="layer-grid"></g>     <!-- intersection dots (needle points) -->
+        <g id="layer-ghost"></g>
+        <g id="layer-floats"></g>   <!-- Feature 4: float/jump threads on reverse -->
+        <g id="layer-stitches"></g>
+        <g id="layer-overlay"></g>
+      </svg>
+
+      <!-- Needle Cursor Element -->
+      <div id="needle-cursor">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2L12 22" stroke="#2C2C2C" stroke-width="1.5" stroke-linecap="round"/>
+          <circle cx="12" cy="5" r="1.5" stroke="#2C2C2C" stroke-width="1"/>
+          <path d="M9 16L12 22L15 16" fill="#C0392B"/>
+        </svg>
+      </div>
+
+      <!-- Radial Selector Popover -->
+      <div id="radial-popover" class="hidden">
+        <div class="radial-title" id="radial-prompt">Warp Threads?</div>
+        <div class="radial-grid">
+          <button class="num-btn">1</button>
+          <button class="num-btn">2</button>
+          <button class="num-btn">3</button>
+          <button class="num-btn">4</button>
+          <button class="num-btn">5</button>
+          <button class="num-btn">6</button>
+          <button class="num-btn">7</button>
+          <button class="num-btn">8</button>
+          <button class="num-btn">9</button>
+        </div>
+        <button class="num-btn zero-btn">0</button>
+      </div>
+
+      <!-- Feature 4: Bulk / Thread Budget Meter (shown on reverse face) -->
+      <div id="bulk-meter">
+        <div id="bulk-meter-track">
+          <div id="bulk-bar"></div>
+        </div>
+        <span id="bulk-label">Place stitches to measure thread budget</span>
       </div>
     </div>
-  </aside>
+  </main>
 
+  <!-- RIGHT PANEL -->
+  <aside id="right-panel">
+    <div id="right-panel-content"></div>
+  </aside>
 </div>
 
 <!-- ═══════════════ SCRIPTS ═══════════════ -->
-<script src="motifs.js"></script>
-<script src="sketch.js"></script>
-
-<script>
-// ═══════════════ APP STATE ═══════════════
-const SoofState = {
-  mode: 'LEARN',
-  activeMotif: null,
-  currentStep: 0,
-  placedStitches: [],
-  selectedColor: '#C0392B',
-  ghostVisible: true,
-  cursorWarp: 0,
-  cursorWeft: 0,
-  lastClickedPoint: null,
-  isStitching: false,  // two-click mode: first click = start, second click = end
-  stitchStart: null,
-};
-
-function setMode(m) {
-  SoofState.mode = m;
-  SoofState.currentStep = 0;
-  SoofState.placedStitches = [];
-  SoofState.lastClickedPoint = null;
-  SoofState.isStitching = false;
-  SoofState.stitchStart = null;
-
-  document.querySelectorAll('.mode-btn').forEach(btn =>
-    btn.classList.toggle('active', btn.dataset.mode === m));
-  renderLeftPanel();
-  renderInstructionPanel();
-}
-
-// ═══════════════ LEFT PANEL ═══════════════
-
-function renderLeftPanel() {
-  const el = document.getElementById('panel-content');
-
-  if (SoofState.mode === 'LEARN' || SoofState.mode === 'PRACTICE') {
-    el.innerHTML = `
-      <div class="panel-heading">MOTIF LIBRARY</div>
-      <p class="panel-hint">Select a motif to ${SoofState.mode === 'LEARN' ? 'learn step-by-step' : 'practice tracing'}.</p>
-      ${SOOF_MOTIFS.map((m, i) => `
-        <button class="motif-chip ${SoofState.activeMotif === m ? 'active' : ''}" onclick="selectMotif(${i})">
-          <div class="motif-chip-name">${m.icon} ${m.name}</div>
-          <div class="motif-chip-desc">${m.description}</div>
-        </button>
-      `).join('')}
-    `;
-  } else {
-    // FREE mode — color palette + tools
-    el.innerHTML = `
-      <div class="panel-heading">THREAD PALETTE</div>
-      <p class="panel-hint">Pick a thread color, then click two points on the grid to lay a stitch.</p>
-      <div class="color-grid">
-        ${[
-          { name: 'Crimson', hex: '#C0392B' },
-          { name: 'Emerald', hex: '#1A7A4A' },
-          { name: 'Royal Blue', hex: '#1B4F9E' },
-          { name: 'Saffron', hex: '#D4A017' },
-          { name: 'Charcoal', hex: '#2C2C2C' },
-          { name: 'White', hex: '#F5EDD6' },
-        ].map(c => `
-          <button class="color-swatch ${SoofState.selectedColor === c.hex ? 'active' : ''}"
-            style="background:${c.hex}" title="${c.name}"
-            onclick="SoofState.selectedColor='${c.hex}'; renderLeftPanel()">
-          </button>
-        `).join('')}
-      </div>
-      <div class="panel-divider"></div>
-      <div class="panel-heading">TOOLS</div>
-      <button class="tool-btn" onclick="SoofState.placedStitches.pop()">↩ Undo Last Stitch</button>
-      <button class="tool-btn" onclick="SoofState.placedStitches=[]">✕ Clear All</button>
-      <div class="panel-divider"></div>
-      <div class="panel-heading">STITCHES PLACED</div>
-      <div class="stitch-count">${SoofState.placedStitches.length}</div>
-    `;
-  }
-}
-
-function selectMotif(idx) {
-  SoofState.activeMotif = SOOF_MOTIFS[idx];
-  SoofState.currentStep = 0;
-  SoofState.placedStitches = [];
-  SoofState.isStitching = false;
-  SoofState.stitchStart = null;
-  renderLeftPanel();
-  renderInstructionPanel();
-}
-
-// ═══════════════ INSTRUCTION PANEL ═══════════════
-
-function renderInstructionPanel() {
-  const el = document.getElementById('instruction-body');
-  const motif = SoofState.activeMotif;
-
-  if (!motif) {
-    el.innerHTML = '<p class="panel-hint">Select a motif from the library to begin.</p>';
-    return;
-  }
-
-  if (SoofState.mode === 'LEARN') {
-    const step = motif.steps[SoofState.currentStep];
-    const isComplete = SoofState.currentStep >= motif.steps.length;
-
-    if (isComplete) {
-      el.innerHTML = `
-        <div class="completion-card">
-          <div class="completion-icon">✦</div>
-          <div class="completion-title">Motif Complete!</div>
-          <p class="panel-hint">You have successfully laid all ${motif.steps.length} stitches for the ${motif.name} pattern.</p>
-          <button class="tool-btn" onclick="selectMotif(${SOOF_MOTIFS.indexOf(motif)})">↻ Restart</button>
-        </div>
-      `;
-      return;
-    }
-
-    el.innerHTML = `
-      <div class="motif-title">${motif.icon} ${motif.name}</div>
-      <div class="step-progress">Step ${SoofState.currentStep + 1} of ${motif.steps.length}</div>
-      <div class="progress-bar">
-        <div class="progress-fill" style="width:${((SoofState.currentStep) / motif.steps.length) * 100}%"></div>
-      </div>
-      <div class="step-instruction">${step.instruction}</div>
-      <div class="step-hint">
-        Click on <strong>W:${step.to[0]}, F:${step.to[1]}</strong> to lay this stitch.
-      </div>
-      <div class="panel-divider"></div>
-      <p class="panel-hint" style="font-size:10px">
-        <strong>Counting tip:</strong> Warp (W) threads run ↕ vertically. Weft (F) threads run ↔ horizontally.
-        Always count from the last stitch point.
-      </p>
-    `;
-  } else if (SoofState.mode === 'PRACTICE') {
-    const total = motif.stitches.length;
-    const placed = SoofState.placedStitches.length;
-    const pct = total > 0 ? ((placed / total) * 100).toFixed(0) : 0;
-    el.innerHTML = `
-      <div class="motif-title">${motif.icon} ${motif.name}</div>
-      <div class="step-progress">${placed} of ${total} stitches placed</div>
-      <div class="progress-bar">
-        <div class="progress-fill" style="width:${pct}%"></div>
-      </div>
-      <p class="panel-hint">Click two grid points to lay a stitch. Match the ghost outline.</p>
-      ${placed >= total ? `
-        <div class="completion-card">
-          <div class="completion-icon">✦</div>
-          <div class="completion-title">Pattern Traced!</div>
-        </div>
-      ` : ''}
-    `;
-  }
-}
-
-// ═══════════════ BOOTSTRAP ═══════════════
-renderLeftPanel();
-renderInstructionPanel();
-</script>
+<script src="js/motifs.js?v=5"></script>
+<script src="js/engine.js?v=5"></script>
+<script src="js/state.js?v=5"></script>
+<script src="js/ui.js?v=5"></script>
+<script src="js/thread-renderer.js?v=5"></script>
+<script src="js/main.js?v=5"></script>
 
 </body>
 </html>
