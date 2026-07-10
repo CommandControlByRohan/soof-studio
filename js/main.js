@@ -11,6 +11,10 @@ function init() {
   setupEventListeners();
   renderMotifLibrary();
   enterMode('LEARN');
+  
+  if (typeof Tour !== 'undefined') {
+    Tour.init();
+  }
 }
 
 function rebuildTargetStitches() {
