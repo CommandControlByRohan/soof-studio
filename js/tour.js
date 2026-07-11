@@ -10,8 +10,8 @@ const Tour = {
   steps: [
     {
       target: null, // Centered
-      title: "Welcome to Soof Studio",
-      text: "Let's take a quick look around your digital embroidery workspace."
+      title: "Welcome to Soof Studio!",
+      text: "Would you like to take a quick 1-minute tour to learn the features of the platform?"
     },
     {
       target: "#mode-nav",
@@ -36,8 +36,6 @@ const Tour = {
   ],
 
   init() {
-    if (localStorage.getItem('soof_tour_seen')) return;
-
     this.overlay = document.getElementById('tour-overlay');
     this.tooltip = document.getElementById('tour-tooltip');
     this.titleEl = document.getElementById('tour-title');
@@ -48,8 +46,15 @@ const Tour = {
     this.btnNext.addEventListener('click', () => this.next());
     this.btnSkip.addEventListener('click', () => this.end());
 
-    // Small delay to ensure UI has rendered
-    setTimeout(() => this.start(), 500);
+    const btnTour = document.getElementById('btn-tour');
+    if (btnTour) {
+      btnTour.addEventListener('click', () => this.start());
+    }
+
+    if (!localStorage.getItem('soof_tour_seen')) {
+      // Small delay to ensure UI has rendered
+      setTimeout(() => this.start(), 500);
+    }
   },
 
   start() {
@@ -87,6 +92,9 @@ const Tour = {
     document.querySelectorAll('.tour-highlight').forEach(el => {
       el.classList.remove('tour-highlight');
     });
+    document.querySelectorAll('.tour-parent-highlight').forEach(el => {
+      el.classList.remove('tour-parent-highlight');
+    });
   },
 
   renderStep() {
@@ -95,12 +103,30 @@ const Tour = {
 
     this.titleEl.textContent = step.title;
     this.textEl.textContent = step.text;
-    this.btnNext.textContent = this.currentStep === this.steps.length - 1 ? "Finish" : "Next";
+    
+    if (this.currentStep === 0) {
+      this.btnNext.textContent = "Yes, start";
+      this.btnSkip.textContent = "No, thanks";
+    } else if (this.currentStep === this.steps.length - 1) {
+      this.btnNext.textContent = "Finish";
+      this.btnSkip.textContent = "Skip";
+    } else {
+      this.btnNext.textContent = "Next";
+      this.btnSkip.textContent = "Skip";
+    }
 
     if (step.target) {
       const targetEl = document.querySelector(step.target);
       if (targetEl) {
         targetEl.classList.add('tour-highlight');
+        
+        // Traverse up and add parent highlight class to ensure stacking context is lifted
+        let parent = targetEl.parentElement;
+        while (parent && parent !== document.body) {
+          parent.classList.add('tour-parent-highlight');
+          parent = parent.parentElement;
+        }
+
         this.positionTooltip(targetEl);
       } else {
         this.centerTooltip();

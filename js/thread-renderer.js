@@ -202,47 +202,51 @@ const ThreadRenderer = {
     };
     ctx.globalCompositeOperation = 'source-over';
     drawPuncture(p1);
-    if (drawProgress > 0.99) drawPuncture(p2);
+    drawPuncture(p2);
 
     // ── Axis Snaking / Slack Physics ──
-    const slack = Math.pow(1 - drawProgress, 2);
+    // Ease-in quartic: moves loosely at first, accelerates rapidly, snaps at the end
+    const easeProgress = Math.pow(drawProgress, 4);
+    const slack = 1 - easeProgress;
+    
     const getAxisPoint = (t) => {
       const bx = p1.x + dx * t;
       const by = p1.y + dy * t;
-      if (slack === 0) return { x: bx, y: by };
+      if (slack <= 0) return { x: bx, y: by };
       
-      const macroWobble = Math.sin(t * Math.PI * 3) * (threadWidthPx * 1.5);
-      const macroBow = Math.sin(t * Math.PI) * (threadWidthPx * 2.5);
-      const snakeNoise = (this._noise(t * 3, stitchSeed) - 0.5) * threadWidthPx * 3;
+      // Form a loose, curved arc above the canvas
+      const bow = Math.sin(t * Math.PI);
+      const maxArc = Math.max(100, len * 1.2); // Large loop scale
       
-      const offset = (macroWobble + macroBow + snakeNoise) * slack;
-      return { x: bx + nx * offset, y: by + ny * offset };
+      // Asymmetric offset to fake a 3D arc "above" the canvas
+      const offsetX = (nx * maxArc) * bow * slack;
+      const offsetY = (ny * maxArc - maxArc * 0.4) * bow * slack;
+      
+      return { x: bx + offsetX, y: by + offsetY };
     };
 
     // ── Opaque Core (fills gaps between fibers, shortened to prevent edge leak) ──
     const coreShortenT = (threadWidthPx * 0.3) / len;
-    if (drawProgress > coreShortenT * 2) {
-      const coreStartT = coreShortenT;
-      const coreEndT = Math.max(coreStartT, drawProgress - coreShortenT);
-      
-      ctx.beginPath();
-      const coreSegments = Math.max(1, Math.floor(segmentCount * (coreEndT - coreStartT)));
-      for (let s = 0; s <= coreSegments; s++) {
-        const t = coreStartT + (s / coreSegments) * (coreEndT - coreStartT);
-        const pt = getAxisPoint(t);
-        if (s === 0) ctx.moveTo(pt.x, pt.y);
-        else ctx.lineTo(pt.x, pt.y);
-      }
-      const coreBrightness = 0.55;
-      const cr = Math.round(color.r * coreBrightness);
-      const cg = Math.round(color.g * coreBrightness);
-      const cb = Math.round(color.b * coreBrightness);
-      ctx.strokeStyle = `rgba(${cr},${cg},${cb},0.95)`;
-      ctx.lineWidth = threadWidthPx * 0.50; // Narrower core hides in the center
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.stroke();
+    const coreStartT = coreShortenT;
+    const coreEndT = Math.max(coreStartT, 1.0 - coreShortenT);
+    
+    ctx.beginPath();
+    const coreSegments = segmentCount;
+    for (let s = 0; s <= coreSegments; s++) {
+      const t = coreStartT + (s / coreSegments) * (coreEndT - coreStartT);
+      const pt = getAxisPoint(t);
+      if (s === 0) ctx.moveTo(pt.x, pt.y);
+      else ctx.lineTo(pt.x, pt.y);
     }
+    const coreBrightness = 0.55;
+    const cr = Math.round(color.r * coreBrightness);
+    const cg = Math.round(color.g * coreBrightness);
+    const cb = Math.round(color.b * coreBrightness);
+    ctx.strokeStyle = `rgba(${cr},${cg},${cb},0.95)`;
+    ctx.lineWidth = threadWidthPx * 0.50; // Narrower core hides in the center
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
 
     // ── Twist configuration ──
     const numPlies = 2; // Two main strands twisted together
@@ -285,7 +289,7 @@ const ThreadRenderer = {
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
 
-      const drawnSegments = Math.max(1, Math.floor(segmentCount * drawProgress));
+      const drawnSegments = segmentCount;
       for (let s = 0; s <= drawnSegments; s++) {
         const t = s / segmentCount;
         const pt = getAxisPoint(t);
@@ -316,7 +320,7 @@ const ThreadRenderer = {
     // ── Silk sheen overlay — thin white line along specular band ──
     const sheenOffset = (specularCenter - 0.5) * threadWidthPx;
     ctx.beginPath();
-    const drawnSheenSegments = Math.max(1, Math.floor(segmentCount * drawProgress));
+    const drawnSheenSegments = segmentCount;
     for (let s = 0; s <= drawnSheenSegments; s++) {
       const t = s / segmentCount;
       const pt = getAxisPoint(t);
@@ -342,7 +346,7 @@ const ThreadRenderer = {
     ctx.save();
     ctx.globalCompositeOperation = 'destination-over';
     ctx.beginPath();
-    const drawnShadowSegments = Math.max(1, Math.floor(segmentCount * drawProgress));
+    const drawnShadowSegments = segmentCount;
     for (let s = 0; s <= drawnShadowSegments; s++) {
       const t = s / segmentCount;
       const pt = getAxisPoint(t);
@@ -386,7 +390,9 @@ const ThreadRenderer = {
       .sort((a, b) => a.order - b.order)
       .forEach(s => {
          if (s._isNew) {
-            s._animStart = now + ((s._animOrder || 0) * this.ANIM_DURATION);
+            // Overlap factor 0.3 allows the next stitch to start forming slack
+            // while the current one is still pulling down.
+            s._animStart = now + ((s._animOrder || 0) * this.ANIM_DURATION * 0.3);
             s._animProgress = 0;
             s._isNew = false;
          }

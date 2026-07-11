@@ -862,7 +862,7 @@ svg {
 
 #tour-tooltip {
   position: fixed;
-  z-index: 9001;
+  z-index: 9010; /* High z-index to sit on top of everything including highlights */
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(8px);
   border: 1px solid rgba(0, 0, 0, 0.1);
@@ -899,11 +899,27 @@ svg {
   gap: 12px;
 }
 
+.tour-actions .tool-btn {
+  padding: 8px 16px;
+  min-width: 100px;
+  height: auto;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
 .tour-highlight {
   position: relative !important;
-  z-index: 9002 !important;
+  z-index: 9005 !important; /* Higher than overlay and parent highlight */
   pointer-events: none !important;
   background: #fff;
   box-shadow: 0 0 0 4px white, 0 0 20px rgba(0,0,0,0.2) !important;
   border-radius: 4px;
+}
+
+.tour-parent-highlight {
+  position: relative !important;
+  z-index: 9002 !important; /* Above overlay (9000) but below highlight (9005) */
 }
